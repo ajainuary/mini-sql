@@ -16,8 +16,8 @@ def init():
                 DB[currentTable] = []
             else:
                 DB[currentTable].append(text)
-def execute(query):
-    """Parses and executes the SQL Query
+def parse(query):
+    """Parses the SQL Query
     Args:
         query (str): SQL query string
     """
@@ -28,9 +28,8 @@ def execute(query):
         condition = []
         length = len(statement.tokens)
         i = 0
-        for token in statement.tokens:
-            print("DBG:", token.value, type(token.ttype))
         #TODO: Error handling for invalid syntax
+        #TODO: Try using ttype comparison instead of match
         while not statement.tokens[i].match(sqlparse.tokens.DML, "SELECT"):
             i = i + 1
         i = i + 1
@@ -39,13 +38,20 @@ def execute(query):
                 attributeList.append(statement.tokens[i].value)
             i = i + 1
         i = i + 1
-        while i < length and (not statement.tokens[i].match(sqlparse.tokens.Keyword, "WHERE")):
+        while i < length and (not isinstance(statement.tokens[i], sqlparse.sql.Where)):
             if not (statement.tokens[i].match(sqlparse.tokens.Whitespace, [" ", "    "]) or statement.tokens[i].match(sqlparse.tokens.Punctuation, ';')):
                 tableList.append(statement.tokens[i].value)
             i = i + 1
-        print("Attribute List:", attributeList)
-        print("Table List:", tableList)
+        if i < length:
+            conditionStatement = statement.tokens[i].tokens
+            for tok in conditionStatement:
+                if isinstance(tok, sqlparse.sql.Comparison):
+                    condition.append(tok)
+                elif isinstance(tok, sqlparse.sql.Token) and tok.match(sqlparse.tokens.Keyword, ["AND", "OR"]):
+                    condition.append(tok.value.upper())
+        return attributeList, tableList, condition
 
 if __name__ == "__main__":
     init()
-    execute(sys.argv[1])
+    attributeList, tableList, condition = parse(sys.argv[1])
+    print(attributeList, tableList, condition)

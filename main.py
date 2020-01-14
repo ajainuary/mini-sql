@@ -37,9 +37,9 @@ def parse(query):
             if not statement.tokens[i].match(sqlparse.tokens.Whitespace, [" ", "    "]):
                 if isinstance(statement.tokens[i], sqlparse.sql.IdentifierList):
                     for identifier in statement.tokens[i].get_identifiers():
-                        attributeList.append(identifier.value)
+                        attributeList.append(identifier)
                 else:
-                    attributeList.append(statement.tokens[i].value)
+                    attributeList.append(statement.tokens[i])
             i = i + 1
         i = i + 1
         while i < length and (not isinstance(statement.tokens[i], sqlparse.sql.Where)):
@@ -109,6 +109,19 @@ def conditionCheck(row, condition):
             if i <= len(checks)-1:
                 return True
     return True
+def selectAttributes(row, attributeList):
+    for attr in attributeList:
+        if attr.ttype == sqlparse.tokens.Wildcard:
+            flag = False
+            for table in row:
+                for col in row[table]:
+                    if flag:
+                        print(", ", end='')
+                    else:
+                        flag = True
+                    print(row[table][col], end='')
+            print()
+            return
 
 def execute(attributeList, tableList, condition):
     csvFiles = [open(table+'.csv', newline='') for table in tableList]
@@ -116,6 +129,34 @@ def execute(attributeList, tableList, condition):
     currentTuple = {tableList[i]: next(readers[i]) for i in range(len(tableList)-1)}
     loop = True
     idx = len(tableList)-1
+    flag = False
+    for attr in attributeList:
+        if flag:
+            print(", ", end='')
+        else:
+            flag = True
+        if isinstance(attr, sqlparse.sql.Identifier):
+            location = []
+            for name in attr:
+                if name.ttype != sqlparse.tokens.Punctuation:
+                    location.append(name.value)
+            if len(location) == 1:
+                for table in DB:
+                    for col in DB[table]:
+                        if col == location[0]:
+                            print(table, col, sep='.', end='')
+            elif len(location) == 2:
+                print('.'.join(location), end='')
+        elif attr.ttype == sqlparse.tokens.Wildcard:
+            flag = False
+            for table in DB:
+                for col in DB[table]:
+                    if flag:
+                        print(", ", end='')
+                    else:
+                        flag = True
+                    print(table, col, sep='.', end='')
+    print('')
     while loop:
         try:
             currentTuple[tableList[idx]] = next(readers[idx])
@@ -128,7 +169,7 @@ def execute(attributeList, tableList, condition):
                 loop = False
         else:
             if idx == len(tableList)-1 and conditionCheck(currentTuple, condition):
-                print(currentTuple)
+                selectAttributes(currentTuple, attributeList)
     for csvfile in csvFiles:
         csvfile.close()
 

@@ -51,7 +51,49 @@ def parse(query):
                     condition.append(tok.value.upper())
         return attributeList, tableList, condition
 
+# def row(csvFiles, readers, tableList, idx):
+#     if idx == len(readers) - 1:
+#         #Last table
+#         try:
+#             curRow = next(readers[idx])
+#         except StopIteration:
+#             csvFiles[idx].seek(0)
+#             return None
+#         else:
+#             return {tableList[idx]: curRow}
+#     product = row(readers, tableList, idx+1)
+#     if product is None:
+#         try:
+#             nextRow = next(readers[idx])
+#         except StopIteration:
+#             csvFiles[idx].seek(0)
+#             return None
+#         else:
+#             product = row(readers, tableList, idx+1)
+#     product[tableList[idx]: ]
+    
+                    
+
+def execute(attributeList, tableList, condition):
+    csvFiles = [open(table+'.csv', newline='') for table in tableList]
+    readers = [csv.DictReader(csvFiles[i], DB[tableList[i]]) for i in range(len(tableList))]
+    currentTuple = {tableList[i]: next(readers[i]) for i in range(len(tableList))}
+    loop = True
+    idx = len(tableList)-1
+    while loop:
+        try:
+            currentTuple[tableList[idx]] = next(readers[idx])
+            idx = min(idx+1, len(tableList)-1)
+        except StopIteration:
+            idx = idx - 1
+            if idx < 0:
+                loop = False
+        else:
+            if idx == len(tableList)-1:
+                print(currentTuple)
+
 if __name__ == "__main__":
     init()
     attributeList, tableList, condition = parse(sys.argv[1])
     print(attributeList, tableList, condition)
+    # execute(attributeList, tableList, condition)

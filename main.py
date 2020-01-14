@@ -59,6 +59,22 @@ def parse(query):
                     condition.append(tok.value.upper())
         return attributeList, tableList, condition
 
+def extractValue(row, identifier):
+    location = []
+    for t in identifier:
+        if t.ttype == sqlparse.tokens.Name:
+            location.append(t.value)
+    if len(location) == 1:
+        for data in row.values():
+            for colName in data:
+                if colName == location[0]:
+                    return int(data[colName])
+    elif len(location) == 2:
+        for colName in row[location[0]]:
+            if colName == location[1]:
+                return int(row[location[0]][colName])
+    #TODO: Handle identifier not found
+
 def conditionCheck(row, condition):
     checks = []
     for cond in condition:
@@ -67,20 +83,7 @@ def conditionCheck(row, condition):
             comparator = ''
             for tok in cond:
                 if isinstance(tok, sqlparse.sql.Identifier):
-                    location = []
-                    for t in tok:
-                        if t.ttype == sqlparse.tokens.Name:
-                            location.append(t.value)
-                    if len(location) == 1:
-                        for data in row.values():
-                            for colName in data:
-                                if colName == location[0]:
-                                    values.append(int(data[colName]))
-                    elif len(location) == 2:
-                        for colName in row[location[0]]:
-                            if colName == location[1]:
-                                values.append(int(row[location[0]][colName]))
-                    #TODO: Handle identifier not found
+                    values.append(extractValue(row, tok))
                 elif tok.ttype == sqlparse.tokens.Comparison:
                     comparator = tok.value
                 elif tok.ttype == sqlparse.tokens.Number.Integer:

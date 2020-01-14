@@ -59,6 +59,54 @@ def parse(query):
                     condition.append(tok.value.upper())
         return attributeList, tableList, condition
 
+def conditionCheck(row, condition):
+    checks = []
+    for cond in condition:
+        if isinstance(cond, sqlparse.sql.Comparison):
+            values = []
+            comparator = ''
+            for tok in cond:
+                if isinstance(tok, sqlparse.sql.Identifier):
+                    location = []
+                    for t in tok:
+                        if t.ttype == sqlparse.tokens.Name:
+                            location.append(t.value)
+                    if len(location) == 1:
+                        for data in row.values():
+                            for colName in data:
+                                if colName == location[0]:
+                                    values.append(int(data[colName]))
+                    elif len(location) == 2:
+                        for colName in row[location[0]]:
+                            if colName == location[1]:
+                                values.append(int(row[location[0]][colName]))
+                    #TODO: Handle identifier not found
+                elif tok.ttype == sqlparse.tokens.Comparison:
+                    comparator = tok.value
+                elif tok.ttype == sqlparse.tokens.Number.Integer:
+                    values.append(int(tok.value))
+            if comparator == '=':
+                checks.append(values[0] == values[1])
+            elif comparator == '<':
+                checks.append(values[0] < values[1])
+            elif comparator == '<=':
+                checks.append(values[0] <= values[1])
+            elif comparator == '>':
+                checks.append(values[0] > values[1])
+            elif comparator == '>=':
+                checks.append(values[0] >= values[1])
+    i = 0
+    for cond in condition:
+        if type(cond) is str:
+            if cond.upper() == 'AND' and not (checks[i] and checks[i+1]):
+                return False
+            elif cond.upper() == 'OR' and not (checks[i] or checks[i+1]):
+                return False
+            i = i + 1
+            if i <= len(checks)-1:
+                return True
+    return True
+
 def execute(attributeList, tableList, condition):
     csvFiles = [open(table+'.csv', newline='') for table in tableList]
     readers = [csv.DictReader(csvFiles[i], DB[tableList[i]]) for i in range(len(tableList))]
@@ -76,8 +124,10 @@ def execute(attributeList, tableList, condition):
             if idx < 0:
                 loop = False
         else:
-            if idx == len(tableList)-1:
+            if idx == len(tableList)-1 and conditionCheck(currentTuple, condition):
                 print(currentTuple)
+    for csvfile in csvFiles:
+        csvfile.close()
 
 if __name__ == "__main__":
     init()

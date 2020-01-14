@@ -35,12 +35,20 @@ def parse(query):
         i = i + 1
         while not statement.tokens[i].match(sqlparse.tokens.Keyword, "FROM"):
             if not statement.tokens[i].match(sqlparse.tokens.Whitespace, [" ", "    "]):
-                attributeList.append(statement.tokens[i].value)
+                if isinstance(statement.tokens[i], sqlparse.sql.IdentifierList):
+                    for identifier in statement.tokens[i].get_identifiers():
+                        attributeList.append(identifier.value)
+                else:
+                    attributeList.append(statement.tokens[i].value)
             i = i + 1
         i = i + 1
         while i < length and (not isinstance(statement.tokens[i], sqlparse.sql.Where)):
             if not (statement.tokens[i].match(sqlparse.tokens.Whitespace, [" ", "    "]) or statement.tokens[i].match(sqlparse.tokens.Punctuation, ';')):
-                tableList.append(statement.tokens[i].value)
+                if isinstance(statement.tokens[i], sqlparse.sql.IdentifierList):
+                    for identifier in statement.tokens[i].get_identifiers():
+                        tableList.append(identifier.value)
+                else:
+                    tableList.append(statement.tokens[i].value)
             i = i + 1
         if i < length:
             conditionStatement = statement.tokens[i].tokens

@@ -151,14 +151,9 @@ def execute(attributeList, tableList, condition):
                     location.append(name.value)
             if len(location) == 1:
                 for table in DB:
-                    fl = False
                     for col in DB[table]:
                         if col == location[0]:
                             print(table, col, sep='.', end='')
-                            fl = True
-                            break
-                    if fl:
-                        break
             elif len(location) == 2:
                 print('.'.join(location), end='')
         elif attr.ttype == sqlparse.tokens.Wildcard:

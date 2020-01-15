@@ -109,10 +109,11 @@ def conditionCheck(row, condition):
             if i <= len(checks)-1:
                 return True
     return True
+
 def selectAttributes(row, attributeList):
+    flag = False
     for attr in attributeList:
         if attr.ttype == sqlparse.tokens.Wildcard:
-            flag = False
             for table in row:
                 for col in row[table]:
                     if flag:
@@ -122,6 +123,14 @@ def selectAttributes(row, attributeList):
                     print(row[table][col], end='')
             print()
             return
+        else:
+            if flag:
+                print(", ", end='')
+            else:
+                flag = True
+            print(extractValue(row, attr), end='')
+    print()
+    return
 
 def execute(attributeList, tableList, condition):
     csvFiles = [open(table+'.csv', newline='') for table in tableList]
@@ -156,7 +165,7 @@ def execute(attributeList, tableList, condition):
                     else:
                         flag = True
                     print(table, col, sep='.', end='')
-    print('')
+    print()
     while loop:
         try:
             currentTuple[tableList[idx]] = next(readers[idx])

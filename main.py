@@ -98,6 +98,8 @@ def conditionCheck(row, condition):
                 checks.append(values[0] > values[1])
             elif comparator == '>=':
                 checks.append(values[0] >= values[1])
+    if len(checks) == 1:
+        return checks[0]
     i = 0
     for cond in condition:
         if type(cond) is str:
@@ -111,26 +113,41 @@ def conditionCheck(row, condition):
     return True
 
 def selectAttributes(row, attributeList):
-    flag = False
+    outputRow = []
     for attr in attributeList:
         if attr.ttype == sqlparse.tokens.Wildcard:
             for table in row:
                 for col in row[table]:
-                    if flag:
-                        print(", ", end='')
-                    else:
-                        flag = True
-                    print(row[table][col], end='')
-            print()
-            return
+                    outputRow.append(row[table][col])
+            return outputRow
+        elif isinstance(attr, sqlparse.sql.Function):
+            outputRow.append(extractValue(row, attr[1][1]))
         else:
-            if flag:
-                print(", ", end='')
-            else:
-                flag = True
-            print(extractValue(row, attr), end='')
-    print()
-    return
+            outputRow.append(extractValue(row, attr))
+    return outputRow
+
+def aggregateAttributes(output, attributeList):
+    aggregrate = False
+    for attr in attributeList:
+        if isinstance(attr, sqlparse.sql.Function):
+            aggregrate = True
+    for attr in attributeList:
+        if aggregrate != isinstance(attr, sqlparse.sql.Function):
+            #TODO: Throw error
+            return output
+    if not aggregrate:
+        return output
+    for i in range(1, len(output)):
+        for j in range(len(attributeList)):
+            if attributeList[j][0].value.upper() == 'MAX':
+                output[0][j] = max(output[i][j], output[0][j])
+            elif attributeList[j][0].value.upper() == 'MIN':
+                output[0][j] = min(output[i][j], output[0][j])
+            elif attributeList[j][0].value.upper() == 'SUM':
+                output[0][j] = output[i][j] + output[0][j]
+            elif attributeList[j][0].value.upper() == 'AVERAGE':
+                output[0][j] = (i*output[0][j] + output[i][j])/(i+1)
+    return [output[0]]
 
 def execute(attributeList, tableList, condition):
     csvFiles = [open(table+'.csv', newline='') for table in tableList]
@@ -138,6 +155,25 @@ def execute(attributeList, tableList, condition):
     currentTuple = {tableList[i]: next(readers[i]) for i in range(len(tableList)-1)}
     loop = True
     idx = len(tableList)-1
+    output = []
+    while loop:
+        try:
+            currentTuple[tableList[idx]] = next(readers[idx])
+            idx = min(idx+1, len(tableList)-1)
+        except StopIteration:
+            csvFiles[idx].seek(0)
+            currentTuple[tableList[idx]] = next(readers[idx])
+            idx = idx - 1
+            if idx < 0:
+                loop = False
+        else:
+            if idx == len(tableList)-1 and conditionCheck(currentTuple, condition):
+                output.append(selectAttributes(currentTuple, attributeList))
+    for csvfile in csvFiles:
+        csvfile.close()
+    return output
+
+def printHeader(attributeList):
     flag = False
     for attr in attributeList:
         if flag:
@@ -151,9 +187,14 @@ def execute(attributeList, tableList, condition):
                     location.append(name.value)
             if len(location) == 1:
                 for table in DB:
+                    fl = False
                     for col in DB[table]:
                         if col == location[0]:
                             print(table, col, sep='.', end='')
+                            fl = True
+                            break
+                    if fl:
+                        break
             elif len(location) == 2:
                 print('.'.join(location), end='')
         elif attr.ttype == sqlparse.tokens.Wildcard:
@@ -165,25 +206,19 @@ def execute(attributeList, tableList, condition):
                     else:
                         flag = True
                     print(table, col, sep='.', end='')
-    print()
-    while loop:
-        try:
-            currentTuple[tableList[idx]] = next(readers[idx])
-            idx = min(idx+1, len(tableList)-1)
-        except StopIteration:
-            csvFiles[idx].seek(0)
-            currentTuple[tableList[idx]] = next(readers[idx])
-            idx = idx - 1
-            if idx < 0:
-                loop = False
         else:
-            if idx == len(tableList)-1 and conditionCheck(currentTuple, condition):
-                selectAttributes(currentTuple, attributeList)
-    for csvfile in csvFiles:
-        csvfile.close()
+            print(attr.value, end='')
+    print()
+
+def formattedPrint(output, attributeList):
+    printHeader(attributeList)
+    for row in output:
+        print(", ".join(str(x) for x in row))
 
 if __name__ == "__main__":
     init()
     attributeList, tableList, condition = parse(sys.argv[1])
     print(attributeList, tableList, condition)
-    execute(attributeList, tableList, condition)
+    output = execute(attributeList, tableList, condition)
+    output = aggregateAttributes(output, attributeList)
+    formattedPrint(output, attributeList)

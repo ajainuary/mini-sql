@@ -16,6 +16,7 @@ def init():
                 DB[currentTable] = []
             else:
                 DB[currentTable].append(text)
+
 def parse(query):
     """Parses the SQL Query
     Args:
@@ -28,8 +29,6 @@ def parse(query):
         condition = []
         length = len(statement.tokens)
         i = 0
-        #TODO: Error handling for invalid syntax
-        #TODO: Try using ttype comparison instead of match
         while not statement.tokens[i].match(sqlparse.tokens.DML, "SELECT"):
             i = i + 1
         i = i + 1
@@ -70,10 +69,12 @@ def extractValue(row, identifier):
                 if colName == location[0]:
                     return int(data[colName])
     elif len(location) == 2:
+        if not location[0] in row:
+            raise Exception('No table with name {} exists'.format(location[0]))
         for colName in row[location[0]]:
             if colName == location[1]:
                 return int(row[location[0]][colName])
-    #TODO: Handle identifier not found
+    raise Exception('Could not find Identifier: {}'.format(identifier.value))
 
 def conditionCheck(row, condition):
     checks = []
@@ -133,8 +134,7 @@ def aggregateAttributes(output, attributeList):
             aggregrate = True
     for attr in attributeList:
         if aggregrate != isinstance(attr, sqlparse.sql.Function):
-            #TODO: Throw error
-            return output
+            raise Exception('Cannot use aggregrate functions with regular attributes')
     if not aggregrate:
         return output
     for i in range(1, len(output)):
@@ -225,12 +225,19 @@ def formattedPrint(output):
 
 if __name__ == "__main__":
     init()
-    attributeList, tableList, condition = parse(sys.argv[1])
-    print(attributeList, tableList, condition)
-    output = execute(attributeList, tableList, condition)
-    if isinstance(attributeList[0], sqlparse.sql.Function) and attributeList[0][0].value.upper() == 'DISTINCT':
-        output = distinct(output)
-    else:
-        output = aggregateAttributes(output, attributeList)
+    try:
+        attributeList, tableList, condition = parse(sys.argv[1])
+    except:
+        print('Error parsing the SQL Query')
+        exit(1)
+    try:
+        output = execute(attributeList, tableList, condition)
+        if isinstance(attributeList[0], sqlparse.sql.Function) and attributeList[0][0].value.upper() == 'DISTINCT':
+            output = distinct(output)
+        else:
+            output = aggregateAttributes(output, attributeList)
+    except Exception as error:
+        print(error)
+        exit(1)
     printHeader(attributeList, tableList)
     formattedPrint(output)

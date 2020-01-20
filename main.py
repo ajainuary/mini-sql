@@ -173,7 +173,7 @@ def execute(attributeList, tableList, condition):
         csvfile.close()
     return output
 
-def printHeader(attributeList):
+def printHeader(attributeList, tableList):
     flag = False
     for attr in attributeList:
         if flag:
@@ -199,7 +199,7 @@ def printHeader(attributeList):
                 print('.'.join(location), end='')
         elif attr.ttype == sqlparse.tokens.Wildcard:
             flag = False
-            for table in DB:
+            for table in tableList:
                 for col in DB[table]:
                     if flag:
                         print(", ", end='')
@@ -210,8 +210,16 @@ def printHeader(attributeList):
             print(attr.value, end='')
     print()
 
-def formattedPrint(output, attributeList):
-    printHeader(attributeList)
+def distinct(output):
+    distinctOutput = []
+    duplicate = {}
+    for row in output:
+        if not (row[0] in duplicate):
+            distinctOutput.append(row)
+            duplicate[row[0]] = True
+    return distinctOutput
+
+def formattedPrint(output):
     for row in output:
         print(", ".join(str(x) for x in row))
 
@@ -220,5 +228,9 @@ if __name__ == "__main__":
     attributeList, tableList, condition = parse(sys.argv[1])
     print(attributeList, tableList, condition)
     output = execute(attributeList, tableList, condition)
-    output = aggregateAttributes(output, attributeList)
-    formattedPrint(output, attributeList)
+    if isinstance(attributeList[0], sqlparse.sql.Function) and attributeList[0][0].value.upper() == 'DISTINCT':
+        output = distinct(output)
+    else:
+        output = aggregateAttributes(output, attributeList)
+    printHeader(attributeList, tableList)
+    formattedPrint(output)

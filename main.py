@@ -64,10 +64,16 @@ def extractValue(row, identifier):
         if t.ttype == sqlparse.tokens.Name:
             location.append(t.value)
     if len(location) == 1:
+        value = None
         for data in row.values():
             for colName in data:
-                if colName == location[0]:
-                    return int(data[colName])
+                if colName == location[0] and value is None:
+                    value = int(data[colName])
+                elif colName == location[0]:
+                    raise Exception('Ambiguous column name: {}'.format(location[0]))
+        if value is None:
+            raise Exception('Could not find Identifier: {}'.format(identifier.value))
+        return value
     elif len(location) == 2:
         if not location[0] in row:
             raise Exception('No table with name {} exists'.format(location[0]))
@@ -113,16 +119,20 @@ def conditionCheck(row, condition):
                 return True
     return True
 
-def selectAttributes(row, attributeList):
+def selectAttributes(row, attributeList, notPrint):
     outputRow = []
     for attr in attributeList:
         if attr.ttype == sqlparse.tokens.Wildcard:
             for table in row:
                 for col in row[table]:
-                    outputRow.append(row[table][col])
+                    if [table, col] not in notPrint:
+                        outputRow.append(row[table][col])
             return outputRow
         elif isinstance(attr, sqlparse.sql.Function):
-            outputRow.append(extractValue(row, attr[1][1]))
+            try:
+                outputRow.append(extractValue(row, attr[1][1]))
+            except:
+                raise Exception('Incorrect function usage: {}'.format(attr.value))
         else:
             outputRow.append(extractValue(row, attr))
     return outputRow
@@ -149,7 +159,7 @@ def aggregateAttributes(output, attributeList):
                 output[0][j] = (i*output[0][j] + output[i][j])/(i+1)
     return [output[0]]
 
-def execute(attributeList, tableList, condition):
+def execute(attributeList, tableList, condition, notPrint):
     csvFiles = [open(table+'.csv', newline='') for table in tableList]
     readers = [csv.DictReader(csvFiles[i], DB[tableList[i]]) for i in range(len(tableList))]
     currentTuple = {tableList[i]: next(readers[i]) for i in range(len(tableList)-1)}
@@ -168,17 +178,18 @@ def execute(attributeList, tableList, condition):
                 loop = False
         else:
             if idx == len(tableList)-1 and conditionCheck(currentTuple, condition):
-                output.append(selectAttributes(currentTuple, attributeList))
+                output.append(selectAttributes(currentTuple, attributeList, notPrint))
     for csvfile in csvFiles:
         csvfile.close()
     return output
 
-def printHeader(attributeList, tableList):
+def printHeader(attributeList, tableList, notPrint):
     flag = False
     for attr in attributeList:
         if flag:
             print(", ", end='')
         else:
+            print('<', end='')
             flag = True
         if isinstance(attr, sqlparse.sql.Identifier):
             location = []
@@ -186,7 +197,7 @@ def printHeader(attributeList, tableList):
                 if name.ttype != sqlparse.tokens.Punctuation:
                     location.append(name.value)
             if len(location) == 1:
-                for table in DB:
+                for table in tableList:
                     fl = False
                     for col in DB[table]:
                         if col == location[0]:
@@ -196,19 +207,40 @@ def printHeader(attributeList, tableList):
                     if fl:
                         break
             elif len(location) == 2:
-                print('.'.join(location), end='')
+                if location not in notPrint:
+                    print('.'.join(location), end='')
+        elif isinstance(attr, sqlparse.sql.Function):
+            location = []
+            print(attr[0].value, end='(')
+            for name in attr[1][1]:
+                if name.ttype != sqlparse.tokens.Punctuation:
+                    location.append(name.value)
+            if len(location) == 1:
+                for table in tableList:
+                    fl = False
+                    for col in DB[table]:
+                        if col == location[0]:
+                            if [table, col] not in notPrint:
+                                print(table, col, sep='.', end=')')
+                                fl = True
+                                break
+                    if fl:
+                        break
+            elif len(location) == 2:
+                print('.'.join(location), end=')')
         elif attr.ttype == sqlparse.tokens.Wildcard:
             flag = False
             for table in tableList:
                 for col in DB[table]:
-                    if flag:
-                        print(", ", end='')
-                    else:
-                        flag = True
-                    print(table, col, sep='.', end='')
+                    if [table, col] not in notPrint:
+                        if flag:
+                            print(", ", end='')
+                        else:
+                            flag = True
+                        print(table, col, sep='.', end='')
         else:
             print(attr.value, end='')
-    print()
+    print('>')
 
 def distinct(output):
     distinctOutput = []
@@ -230,8 +262,24 @@ if __name__ == "__main__":
     except:
         print('Error parsing the SQL Query')
         exit(1)
+    notPrint = []
+    for cond in condition:
+        if isinstance(cond, sqlparse.sql.Comparison):
+            sides = []
+            comparator = ''
+            for tok in cond:
+                if isinstance(tok, sqlparse.sql.Identifier):
+                    location = []
+                    for t in tok:
+                        if t.ttype == sqlparse.tokens.Name:
+                            location.append(t.value)
+                    sides.append(location)
+                elif tok.ttype == sqlparse.tokens.Comparison:
+                    comparator = tok.value
+            if comparator == '=' and sides[0][1] == sides[1][1]:
+                notPrint.append(sides[1])
     try:
-        output = execute(attributeList, tableList, condition)
+        output = execute(attributeList, tableList, condition, notPrint)
         if isinstance(attributeList[0], sqlparse.sql.Function) and attributeList[0][0].value.upper() == 'DISTINCT':
             output = distinct(output)
         else:
@@ -239,5 +287,5 @@ if __name__ == "__main__":
     except Exception as error:
         print(error)
         exit(1)
-    printHeader(attributeList, tableList)
+    printHeader(attributeList, tableList, notPrint)
     formattedPrint(output)
